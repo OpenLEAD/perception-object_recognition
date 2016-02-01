@@ -16,4 +16,6 @@
   -->
   <depend package="slam/pcl" />
   <depend package="base/types" />
+  <depend package="boost" />
+  <osdeps name="boost"/>
 </package>

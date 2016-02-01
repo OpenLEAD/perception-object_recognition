@@ -13,6 +13,5 @@ namespace object_recognition
             void welcome();
     };
 
-} // end namespace object_recognition
-
+} // end object_recognition
 #endif // _DUMMYPROJECT_DUMMY_HPP_
