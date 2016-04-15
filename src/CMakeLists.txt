@@ -1,7 +1,7 @@
 find_package(VTK)
 rock_library(object_recognition
-    SOURCES Dummy.cpp 
-    HEADERS Dummy.hpp
+    SOURCES ORPointCloud.cpp
+    HEADERS ORPointCloud.hpp
     DEPS_PKGCONFIG pcl_registration-1.7 pcl_io-1.7 base-types pcl_visualization-1.7  pcl_recognition-1.7 pcl_features-1.7 pcl_keypoints-1.7 pcl_filters-1.7
     DEPS_CMAKE Boost VTK)
 
@@ -33,4 +33,7 @@ rock_executable(hypothesis_bin hypothesis.cpp
     DEPS object_recognition)
 
 rock_executable(identification_bin identification.cpp
+    DEPS object_recognition)
+
+rock_executable(save_bin save_model.cpp
     DEPS object_recognition)
