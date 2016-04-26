@@ -4,10 +4,16 @@
 #include <pcl/features/normal_3d_omp.h>
 #include <pcl/features/shot_omp.h>
 #include <pcl/features/board.h>
+#include <pcl/keypoints/iss_3d.h>
 #include <pcl/keypoints/uniform_sampling.h>
 #include <pcl/visualization/pcl_visualizer.h>
 #include <pcl/common/transforms.h>
 #include <pcl/console/parse.h>
+#include "ORPointCloud.hpp"
+#include <pcl/filters/normal_space.h>  
+#include <pcl/filters/random_sample.h>
+#include <pcl/filters/covariance_sampling.h>
+
 
 typedef pcl::PointXYZRGBA PointType;
 typedef pcl::Normal NormalType;
@@ -19,6 +25,10 @@ std::string model_filename_;
 //Algorithm params
 bool use_cloud_resolution_ (false);
 bool use_hough_ (true);
+bool use_uniform_(false);
+bool use_normal_(false);
+bool use_random_(true);
+
 float model_ss_ (5.0f);
 float scene_ss_ (3.0f);
 float rf_rad_ (0.115f);
@@ -96,7 +106,7 @@ main (int argc, char *argv[])
   pcl::PointCloud<PointType>::Ptr model_keypoints (new pcl::PointCloud<PointType> ());
   pcl::PointCloud<NormalType>::Ptr model_normals (new pcl::PointCloud<NormalType> ());
   pcl::PointCloud<DescriptorType>::Ptr model_descriptors (new pcl::PointCloud<DescriptorType> ());
-
+  
   //
   //  Load clouds
   //
@@ -108,17 +118,21 @@ main (int argc, char *argv[])
 
   //
   //  Set up resolution invariance
-  //
+ 
+  float resolution = static_cast<float> (computeCloudResolution (model));
   if (use_cloud_resolution_)
-  {
-    //float resolution = static_cast<float> (computeCloudResolution (model));
-    float resolution = 30.0f;
+  { 
     if (resolution != 0.0f)
     {
       model_ss_   *= resolution;
       rf_rad_     *= resolution;
       descr_rad_  *= resolution;
       cg_size_    *= resolution;
+    
+      std::cout << "models_ss: " << model_ss_ << std::endl;
+      std::cout << "rf_rad: " << rf_rad_ << std::endl;
+      std::cout << "descr_rad: " << descr_rad_ << std::endl;
+      std::cout << "cg_size: " << cg_size_ << std::endl;
     }
   }
   //
@@ -132,29 +146,89 @@ main (int argc, char *argv[])
   //
   //  Downsample Clouds to Extract keypoints
   //
-  pcl::PointCloud<int> sampled_indices;
-
-  pcl::UniformSampling<PointType> uniform_sampling;
-  uniform_sampling.setInputCloud (model);
-  uniform_sampling.setRadiusSearch (model_ss_);
-  std::cout << "model_ss " << model_ss_ <<  std::endl;
-  uniform_sampling.compute (sampled_indices);
-  pcl::copyPointCloud (*model, sampled_indices.points, *model_keypoints);
-  std::cout << "Model total points: " << model->size () << "; Selected Keypoints: " << model_keypoints->size () << std::endl;
-
-
-  //
-  //  Compute Descriptor for keypoints
-  //
+// if(use_random_||use_random_)
+// {
+//     std::vector<int> sampled_indices;
+// } else
+//      pcl::IndicesPtr sampled_indices(new std::vector<int>());/
+  
+ use_uniform_=true; 
+// if(use_uniform_)
+//  {
+//      //std::vector<int> sampled_indices;
+//      pcl::PointCloud<int> sampled_indices;
+//      pcl::UniformSampling<PointType> uniform_sampling;
+//      uniform_sampling.setInputCloud (model);
+//      uniform_sampling.setRadiusSearch (model_ss_);
+//      std::cout << "model_ss " << model_ss_ <<  std::endl;
+//      uniform_sampling.compute (sampled_indices);
+//      pcl::copyPointCloud (*model, sampled_indices.points, *model_keypoints);
+//      std::cout << "Model total points: " << model->size () << "; Selected Keypoints: " << model_keypoints->size () << std::endl;
+//  }
+// }
+//  if(use_normal_)
+//  {
+//      pcl::NormalSpaceSampling<PointType,NormalType> normal_space_sampling;
+//      normal_space_sampling.setInputCloud(model);
+//      normal_space_sampling.setNormals(model_normals);
+//      normal_space_sampling.setBins(1000,1000,1000);
+//      normal_space_sampling.setSeed(0);
+//      normal_space_sampling.setSample(static_cast<unsigned int>(model_normals->size())/4);
+//      normal_space_sampling.filter(*sampled_indices);
+//      pcl::copyPointCloud (*model, *sampled_indices, *model_keypoints);
+//      std::cout << "Model total points: " << model->size () << "; Selected Keypoints: " << model_keypoints->size () << std::endl;
+//
+// }
+//if(use_random_)
+//  {
+//      std::vector<int> sampled_indices;
+//      pcl::RandomSample<PointType> random_sample(true);
+//      random_sample.setInputCloud(model);
+//      int num_points = static_cast<unsigned int>(model->size()*0.1);
+//      std::cout<<num_points<<std::endl;
+//      random_sample.setSample(num_points);
+//      random_sample.filter(sampled_indices);
+//      pcl::copyPointCloud (*model, sampled_indices, *model_keypoints);
+//      std::cout << "Model total points: " << model->size () << "; Selected Keypoints: " << model_keypoints->size () << std::endl;
+//  }
+//  
+  pcl::search::KdTree<PointType>::Ptr tree (new pcl::search::KdTree<PointType> ());
+  
+  
+   // Compute model_resolution
+  
+   double iss_salient_radius_ = 6 * resolution;
+   
+   double iss_non_max_radius_ = 4 * resolution;
+  
+   //
+   // Compute keypoints
+   //
+   pcl::ISSKeypoint3D<PointType, PointType> iss_detector;
+  
+   iss_detector.setSearchMethod (tree);
+   iss_detector.setSalientRadius (iss_salient_radius_);
+   iss_detector.setNonMaxRadius (iss_non_max_radius_);
+   iss_detector.setThreshold21 (0.975);
+   iss_detector.setThreshold32 (0.975);
+   iss_detector.setMinNeighbors (5);
+   iss_detector.setNumberOfThreads (4);
+   iss_detector.setInputCloud (model);
+   iss_detector.compute (*model_keypoints);
+  
+  
+  ////
+  ////  Compute Descriptor for keypoints
+  ////
   pcl::SHOTEstimationOMP<PointType, NormalType, DescriptorType> descr_est;
   descr_est.setRadiusSearch (descr_rad_);
-
+  
   descr_est.setInputCloud (model_keypoints);
   descr_est.setInputNormals (model_normals);
   descr_est.setSearchSurface (model);
   descr_est.compute (*model_descriptors);
-  std::cout << "Model total points: " << model_descriptors->size () << std::endl;
-  //
+  std::cout << "Model total descriptors: " << model_descriptors->size () << std::endl;
+  
   //  Visualization
   //
   pcl::visualization::PCLVisualizer viewer ("Keypoints");
@@ -165,7 +239,7 @@ main (int argc, char *argv[])
 
   //We are translating the model so that it doesn't end in the middle of the scene representation
   pcl::transformPointCloud (*model, *off_scene_model, Eigen::Vector3f (0,0,0), Eigen::Quaternionf (1, 0, 0, 0));
-  pcl::transformPointCloud (*model_keypoints, *off_scene_model_keypoints, Eigen::Vector3f (1,0,0), Eigen::Quaternionf (1, 0, 0, 0));
+  pcl::transformPointCloud (*model_keypoints, *off_scene_model_keypoints, Eigen::Vector3f (0,0,0), Eigen::Quaternionf (1, 0, 0, 0));
   //pcl::transformPointCloud (*model_descriptors, *off_scene_model_descriptors, Eigen::Vector3f (0,0,0), Eigen::Quaternionf (1, 0, 0, 0));
 
   pcl::visualization::PointCloudColorHandlerCustom<PointType> off_scene_model_color_handler (off_scene_model, 255, 255, 255);
