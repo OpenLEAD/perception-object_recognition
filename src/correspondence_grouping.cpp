@@ -14,7 +14,11 @@
 #include <pcl/console/parse.h>
 #include "ORPointCloud.hpp"
 #include <boost/graph/graph_concepts.hpp>
+//Standard ICP
 #include <pcl/registration/icp.h>
+//Generalized ICP
+#include <pcl/registration/gicp.h>
+
 
 typedef pcl::PointXYZRGBA PointType;
 typedef pcl::Normal NormalType;
@@ -28,6 +32,7 @@ std::string scene_filename_;
 bool show_keypoints_ (false);
 bool show_correspondences_ (false);
 bool use_cloud_resolution_ (false);
+bool save_alingment_(false);
 bool use_hough_ (true);
 float model_ss_ (0.01f);
 float scene_ss_ (0.03f);
@@ -50,6 +55,7 @@ showHelp (char *filename)
   std::cout << "     -h:                     Show this help." << std::endl;
   std::cout << "     -k:                     Show used keypoints." << std::endl;
   std::cout << "     -c:                     Show used correspondences." << std::endl;
+  std::cout << "     -s:                     Save Alignment." << std::endl;
   std::cout << "     -r:                     Compute the model cloud resolution and multiply" << std::endl;
   std::cout << "                             each radius given by that value." << std::endl;
   std::cout << "     --algorithm (Hough|GC): Clustering algorithm used (default Hough)." << std::endl;
@@ -97,7 +103,10 @@ parseCommandLine (int argc, char *argv[])
   {
     use_cloud_resolution_ = true;
   }
-
+  if (pcl::console::find_switch (argc, argv, "-s"))
+  {
+    save_alingment_ = true;
+  }
   std::string used_algorithm;
   if (pcl::console::parse_argument (argc, argv, "--algorithm", used_algorithm) != -1)
   {
@@ -158,14 +167,14 @@ main (int argc, char *argv[])
 
 
     modelOR.extractNormals();
-    modelOR.extractKeypoints(model_ss_,use_cloud_resolution_);
+    modelOR.extractKeypoints(model_ss_,true);
     modelOR.extractDescriptors(descr_rad_,use_cloud_resolution_);
     modelOR.extractRF(rf_rad_);
 
     sceneOR.importCloud(scene_filename_, false);
     sceneOR.computeCloudResolution();
     sceneOR.extractNormals();
-    sceneOR.extractKeypoints(scene_ss_,use_cloud_resolution_);
+    sceneOR.extractKeypoints(scene_ss_,true);
     sceneOR.extractDescriptors(descr_rad_,use_cloud_resolution_);
     sceneOR.extractRF(rf_rad_);    
 
@@ -206,12 +215,14 @@ main (int argc, char *argv[])
     {
         cout << "Recognized Instances: " << rototranslations.size () << endl << endl;
     }
+    
 
     //Find the instance with the larger number of correspondences
     float min = 1000;
     int i_min=0;
     bool testing_model = true;
-    std::cout << "Model instances found: " << rototranslations.size () << std::endl;
+
+
 
     Eigen::Vector3f trans; 
     Eigen::Matrix3f rot;
@@ -291,14 +302,20 @@ main (int argc, char *argv[])
     icp.setMaximumIterations(50);
     icp.setMaxCorrespondenceDistance (0.005f);
     icp.setInputTarget (sceneOR.cloud);
-    icp.setInputSource (rotated_model);
+    icp.setInputCloud (rotated_model);
     pcl::PointCloud<PointType>::Ptr registered (new pcl::PointCloud<PointType>);
     icp.align (*registered);
 
+    if(save_alingment_)
+    {
+        std::string alignament_name = sceneOR.file_name_raw + "_aligned.pcd";
+        pcl::io::savePCDFile(alignament_name,*registered); 
+        std::cout << "alingment model saved "<< alignament_name << std::endl; 
+    }   
+
     if (icp.hasConverged ())
     {
-      std::cout << "ICP has converged" << std::endl;
-      
+      std::cout << "ICP has converged" << std::endl;  
   
     } 
         //  Output results
