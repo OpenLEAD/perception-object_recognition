@@ -1,7 +1,7 @@
 #include"ORPointCloud.hpp"
 #include <stdexcept>
-
-
+#include <iostream>
+#include <pcl/keypoints/iss_3d.h>
 ORPointCloud::ORPointCloud():
 cloud (new pcl::PointCloud<PointType> ()),keypoints (new pcl::PointCloud<PointType> ()),
     normals (new pcl::PointCloud<NormalType> ()), descriptors (new pcl::PointCloud<DescriptorType> ()), reference_frames (new pcl::PointCloud<RFType>())
@@ -11,8 +11,6 @@ cloud (new pcl::PointCloud<PointType> ()),keypoints (new pcl::PointCloud<PointTy
 
 void ORPointCloud::importCloud(const std::string &cloud_name, bool model=false)
 {
-    std::string file_name;
-    std::string file_name_raw;
 
     size_t last_dot = cloud_name.find_last_of(".");
     if (last_dot == std::string::npos)
@@ -67,17 +65,43 @@ void ORPointCloud::saveModel()
 
 void ORPointCloud::extractKeypoints(float cloud_ss , bool use_cloud_resolution)
 {
-     //if(use_cloud_resolution)
-       //  cloud_ss *= cloud_resolution;
-     
-     pcl::PointCloud<int> sampled_indices;
-     pcl::UniformSampling<PointType> uniform_sampling;
-     uniform_sampling.setInputCloud (cloud);
-     uniform_sampling.setRadiusSearch (cloud_ss);
-     uniform_sampling.compute (sampled_indices);
-     pcl::copyPointCloud (*cloud, sampled_indices.points, *keypoints);
-     if(!keypoints) 
+     if(use_cloud_resolution)
+     {
+         pcl::search::KdTree<PointType>::Ptr tree (new pcl::search::KdTree<PointType> ());
+  
+  
+         // Compute model_resolution
+          
+          double iss_salient_radius_ = 6 * cloud_resolution;
+           
+          double iss_non_max_radius_ = 4 * cloud_resolution;
+          
+          //
+          // Compute keypoints
+          //
+          pcl::ISSKeypoint3D<PointType, PointType> iss_detector;
+          
+          iss_detector.setSearchMethod (tree);
+          iss_detector.setSalientRadius (iss_salient_radius_);
+          iss_detector.setNonMaxRadius (iss_non_max_radius_);
+          iss_detector.setThreshold21 (0.975);
+          iss_detector.setThreshold32 (0.975);
+          iss_detector.setMinNeighbors (5);
+          iss_detector.setNumberOfThreads (4);
+          iss_detector.setInputCloud (cloud);
+          iss_detector.compute (*keypoints);
+     }else
+     {
+
+         pcl::PointCloud<int> sampled_indices;
+         pcl::UniformSampling<PointType> uniform_sampling;
+         uniform_sampling.setInputCloud (cloud);
+         uniform_sampling.setRadiusSearch (cloud_ss);
+         uniform_sampling.compute (sampled_indices);
+         pcl::copyPointCloud (*cloud, sampled_indices.points, *keypoints);
+         if(!keypoints) 
         std::cout << "No keypoints found!!!" << std::endl;
+     }
 }
 
 
