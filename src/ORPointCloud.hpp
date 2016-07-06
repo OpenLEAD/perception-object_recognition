@@ -26,14 +26,14 @@ class ORPointCloud
     std::string file_name_raw;    
     
     ORPointCloud();
-    void extractKeypoints(float cloud_ss, bool use_cloud_resolution);
+    void extractKeypoints(float cloud_ss, int sampling_method);
     void extractNormals();
     void extractDescriptors(float descr_rad, bool use_cloud_resolution);
     void extractRF(float rf_rad);
     void importCloud(const std::string &file_name, bool model);
     void saveModel();
     void computeCloudResolution();
-    static pcl::CorrespondencesPtr correspondences(const ORPointCloud* model, ORPointCloud* scene);    
+    static pcl::CorrespondencesPtr correspondences(const ORPointCloud* model,const ORPointCloud* scene);    
     static double computeCloudRMS(const ORPointCloud* target,
             pcl::PointCloud<PointType>::ConstPtr source, double max_range); 
     

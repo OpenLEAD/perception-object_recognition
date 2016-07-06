@@ -35,8 +35,11 @@ main (int argc, char** argv)
         cloud_it->b=0;
     }
 
-      
+    pcl::PointCloud<pcl::PointXYZRGBA>::Ptr cloud2 (new pcl::PointCloud<pcl::PointXYZRGBA>);
+    pcl::io::loadPCDFile<pcl::PointXYZRGBA>("models/montagem_pa_corrigida00000.pcd", *cloud2);
+ 
     viewer.addPointCloud (cloud, "cloud");
+    //viewer.addPointCloud (cloud2, "cloud2");
     viewer.setBackgroundColor (1, 1, 1);
    
     

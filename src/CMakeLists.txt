@@ -2,7 +2,10 @@ find_package(VTK)
 rock_library(object_recognition
     SOURCES ORPointCloud.cpp
     HEADERS ORPointCloud.hpp
-    DEPS_PKGCONFIG pcl_registration-1.7 pcl_io-1.7 base-types pcl_visualization-1.7  pcl_recognition-1.7 pcl_features-1.7 pcl_keypoints-1.7 pcl_filters-1.7
+    DEPS_PKGCONFIG pcl_surface-1.7 pcl_registration-1.7 
+    pcl_io-1.7 pcl_keypoints-1.7 pcl_filters-1.7 
+    pcl_visualization-1.7 pcl_recognition-1.7 pcl_features-1.7
+    base-types
     DEPS_CMAKE Boost VTK)
 
 rock_executable(narf_identifier_bin narf_identifier.cpp
@@ -36,4 +39,20 @@ rock_executable(identification_bin identification.cpp
     DEPS object_recognition)
 
 rock_executable(save_bin save_model.cpp
+    DEPS object_recognition)
+
+
+rock_executable(rms_bin rms.cpp
+    DEPS object_recognition)
+
+rock_executable(hausdorff_bin compute_hausdorff.cpp
+    DEPS object_recognition)
+
+rock_executable(test test.cpp
+    DEPS object_recognition)
+
+rock_executable(bspline_bin bspline_fitting.cpp
+    DEPS object_recognition)
+
+rock_executable(marching_cubes_bin marching_cubes.cpp
     DEPS object_recognition)

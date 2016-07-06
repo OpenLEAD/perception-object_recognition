@@ -45,6 +45,9 @@
 #include <pcl/console/time.h>
 #include <pcl/search/kdtree.h>
 #include <pcl/visualization/pcl_visualizer.h>
+#include<pcl/visualization/pcl_plotter.h>
+
+#include <boost/math/special_functions/round.hpp>
 
 using namespace std;
 using namespace pcl;
@@ -52,8 +55,8 @@ using namespace pcl::io;
 using namespace pcl::console;
 using namespace pcl::search;
 
-typedef PointXYZ PointType;
-typedef PointCloud<PointXYZ> Cloud;
+typedef PointXYZRGB PointType;
+typedef PointCloud<PointXYZRGB> Cloud;
 
 void
 printHelp (int, char **argv)
@@ -79,82 +82,88 @@ loadCloud (const std::string &filename, Cloud &cloud)
 void
 compute (Cloud &cloud_a, Cloud &cloud_b)
 {
-  // Estimate
-  TicToc tt;
-  tt.tic ();
+    // Estimate
+    TicToc tt;
+    tt.tic ();
 
-  print_highlight (stderr, "Computing ");
+    print_highlight (stderr, "Computing ");
 
-  int id_a, id_b, id_a2, id_b2 = 0;
-  
-  // compare A to B
-  pcl::search::KdTree<PointType> tree_b;
-  tree_b.setInputCloud (cloud_b.makeShared ());
-  float max_dist_a = -std::numeric_limits<float>::max ();
-  std::vector<double> distances; 
-  
-  for (size_t i = 0; i < cloud_a.points.size (); ++i)
-  {
-    std::vector<int> indices (1);
-    std::vector<float> sqr_distances (1);
-
-    tree_b.nearestKSearch (cloud_a.points[i], 1, indices, sqr_distances);
-    if (sqr_distances[0] > max_dist_a)
+    int id_a, id_b = 0;
+      
+    // compare A to B
+    pcl::search::KdTree<PointType> tree_b;
+    tree_b.setInputCloud (cloud_b.makeShared ());
+    float max_dist_a = -std::numeric_limits<float>::max ();
+    std::vector<double> distances; 
+    for (size_t i = 0; i < cloud_a.points.size (); ++i)
     {
-      max_dist_a = sqr_distances[0];
-      id_a = i;
-      id_b = indices[0];
+        std::vector<int> indices (1);
+        std::vector<float> sqr_distances (1);
+
+        tree_b.nearestKSearch (cloud_a.points[i], 1, indices, sqr_distances);
+    
+        distances.push_back(std::sqrt(sqr_distances[0]));
+        
+        
+        if (sqr_distances[0] > max_dist_a)
+        {
+            max_dist_a = sqr_distances[0];
+            id_a = i;
+            id_b = indices[0];
+        }
     }
-  }
 
+    max_dist_a = std::sqrt (max_dist_a);
 
-  // compare B to A
-  pcl::search::KdTree<PointType> tree_a;
-  tree_a.setInputCloud (cloud_a.makeShared ());
-  float max_dist_b = -std::numeric_limits<float>::max ();
-  for (size_t i = 0; i < cloud_b.points.size (); ++i)
-  {
-    std::vector<int> indices (1);
-    std::vector<float> sqr_distances (1);
+    //  float dist = std::max (max_dist_a, max_dist_b);
 
-    tree_a.nearestKSearch (cloud_b.points[i], 1, indices, sqr_distances);
-    if (sqr_distances[0] > max_dist_b)
-      max_dist_b = sqr_distances[0];
-      id_a2=indices[0];
-      id_b2=i;
-  }
+    print_info ("[done, "); print_value ("%g", tt.toc ()); print_info (" ms : ");
+    print_info ("Hausdorff Distance A->B: "); print_value ("%f", max_dist_a);
+    print_info (" ]\n");
 
-  max_dist_a = std::sqrt (max_dist_a);
-  max_dist_b = std::sqrt (max_dist_b);
+    //coloring the point cloud accordinly to to the distance
+    int i =0;
+    double lut_scale = 255.0/(max_dist_a);
+    
+    for (size_t i = 0; i < cloud_a.points.size (); ++i)
+    {   
+        uint8_t value = boost::math::iround(distances[i]*lut_scale);
 
-  float dist = std::max (max_dist_a, max_dist_b);
-
-  print_info ("[done, "); print_value ("%g", tt.toc ()); print_info (" ms : ");
-  print_info ("A->B: "); print_value ("%f", max_dist_a);
-  print_info (", B->A: "); print_value ("%f", max_dist_b);
-  print_info (", Hausdorff Distance: "); print_value ("%f", dist);
-  print_info (" ]\n");
-
-
-
-    pcl::visualization::PCLVisualizer viewer ("Correspondence Grouping");
+        uint32_t rgb = (static_cast<uint32_t>(value) << 16 |
+                              static_cast<uint32_t>(0) << 8 | static_cast<uint32_t>(255-value));
+        cloud_a.points[i].rgb = *reinterpret_cast<float*>(&rgb);
+    }    
+    
+    //for(Cloud::iterator cloud_it = cloud_a.begin(); cloud_it != cloud_a.end(); ++cloud_it)
+    //{
+      // int value = boost::math::iround(distances[i]*lut_scale); 
+       //Green (= min) -> Magenta (= max)
+      // cloud_it->r = value;
+      // cloud_it->g = 255 - value;
+      // cloud_it->b = value;
+    // }
+    pcl::visualization::PCLVisualizer viewer ("Hausdorff Distance");
 
     pcl::PointCloud<PointType>::Ptr ptr_a(&cloud_a);
     pcl::PointCloud<PointType>::Ptr ptr_b(&cloud_b);
-    viewer.addPointCloud<PointXYZ>(ptr_a, "cloud_a");
-    viewer.addPointCloud<PointXYZ>(ptr_b, "cloud_b");
-
-    PointXYZ& model_point_ab = cloud_a.points[id_a];
-    PointXYZ& scene_point_ab = cloud_b.points[id_b];    
-    PointXYZ& model_point_ba = cloud_a.points[id_a2];
-    PointXYZ& scene_point_ba = cloud_b.points[id_b2];    
+    pcl::visualization::PointCloudColorHandlerRGBField<pcl::PointXYZRGB> rgb(ptr_a);
+    
+    viewer.addPointCloud<PointXYZRGB>(ptr_a,rgb, "cloud_a");
+    viewer.addPointCloud<PointXYZRGB>(ptr_b, "cloud_b");
+    PointXYZRGB& model_point_ab = cloud_a.points[id_a];
+    PointXYZRGB& scene_point_ab = cloud_b.points[id_b];    
     std::stringstream ss_line;
     ss_line << "correspondence_line" << id_a << "_" << id_b;
-
     //  We are drawing a line for each pair of clustered correspondences found between the model and the scene
-    viewer.addLine<PointXYZ, PointXYZ> (model_point_ab, scene_point_ab, 0, 255, 0, ss_line.str ());
-    ss_line << "correspondence_line" << id_a2 << "_" << id_b2;
-    viewer.addLine<PointXYZ, PointXYZ> (model_point_ba, scene_point_ba, 255, 0, 0, ss_line.str ());
+    viewer.addArrow<PointXYZRGB, PointXYZRGB> (model_point_ab, scene_point_ab, 0, 255, 0,true, ss_line.str ());
+
+    // Plotter object.
+    pcl::visualization::PCLPlotter plotter;
+    cout << distances.size() << endl;
+    plotter.addHistogramData(distances, distances.size(),"Distance Error Histogram"); 
+    plotter.setXTitle("Distance Error Histogram (m)"); 
+    plotter.setYTitle("");
+    plotter.plot();
     while (!viewer.wasStopped ())
     {
         viewer.spinOnce ();

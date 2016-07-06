@@ -2,6 +2,7 @@
 #include <stdexcept>
 #include <iostream>
 #include <pcl/keypoints/iss_3d.h>
+#include <pcl/filters/normal_space.h>  
 ORPointCloud::ORPointCloud():
 cloud (new pcl::PointCloud<PointType> ()),keypoints (new pcl::PointCloud<PointType> ()),
     normals (new pcl::PointCloud<NormalType> ()), descriptors (new pcl::PointCloud<DescriptorType> ()), reference_frames (new pcl::PointCloud<RFType>())
@@ -63,44 +64,57 @@ void ORPointCloud::saveModel()
     pcl::io::savePCDFile(file_name_raw + "_rf.pcd", *reference_frames);
 }
 
-void ORPointCloud::extractKeypoints(float cloud_ss , bool use_cloud_resolution)
+void ORPointCloud::extractKeypoints(float cloud_ss , int sampling_method)
 {
-     if(use_cloud_resolution)
-     {
-         pcl::search::KdTree<PointType>::Ptr tree (new pcl::search::KdTree<PointType> ());
-  
-  
-         // Compute model_resolution
+    switch(sampling_method)
+    {
+        case 0:
+            {
+            pcl::search::KdTree<PointType>::Ptr tree (new pcl::search::KdTree<PointType> ());
+            double iss_salient_radius_ = 6 * cloud_resolution;
+            double iss_non_max_radius_ = 4 * cloud_resolution;
           
-          double iss_salient_radius_ = 6 * cloud_resolution;
-           
-          double iss_non_max_radius_ = 4 * cloud_resolution;
+            //
+            // Compute keypoints
+            //
+            pcl::ISSKeypoint3D<PointType, PointType> iss_detector;
           
-          //
-          // Compute keypoints
-          //
-          pcl::ISSKeypoint3D<PointType, PointType> iss_detector;
-          
-          iss_detector.setSearchMethod (tree);
-          iss_detector.setSalientRadius (iss_salient_radius_);
-          iss_detector.setNonMaxRadius (iss_non_max_radius_);
-          iss_detector.setThreshold21 (0.975);
-          iss_detector.setThreshold32 (0.975);
-          iss_detector.setMinNeighbors (5);
-          iss_detector.setNumberOfThreads (4);
-          iss_detector.setInputCloud (cloud);
-          iss_detector.compute (*keypoints);
-     }else
-     {
+            iss_detector.setSearchMethod (tree);
+            iss_detector.setSalientRadius (iss_salient_radius_);
+            iss_detector.setNonMaxRadius (iss_non_max_radius_);
+            iss_detector.setThreshold21 (0.975);
+            iss_detector.setThreshold32 (0.975);
+            iss_detector.setMinNeighbors (5);
+            iss_detector.setNumberOfThreads (4);
+            iss_detector.setInputCloud (cloud);
+            iss_detector.compute (*keypoints);
+            }break;
 
-         pcl::PointCloud<int> sampled_indices;
-         pcl::UniformSampling<PointType> uniform_sampling;
-         uniform_sampling.setInputCloud (cloud);
-         uniform_sampling.setRadiusSearch (cloud_ss);
-         uniform_sampling.compute (sampled_indices);
-         pcl::copyPointCloud (*cloud, sampled_indices.points, *keypoints);
-         if(!keypoints) 
-        std::cout << "No keypoints found!!!" << std::endl;
+        case 1:
+            {
+            pcl::PointCloud<int> sampled_indices;
+            pcl::UniformSampling<PointType> uniform_sampling;
+            uniform_sampling.setInputCloud (cloud);
+            uniform_sampling.setRadiusSearch (cloud_ss);
+            uniform_sampling.compute (sampled_indices);
+            pcl::copyPointCloud (*cloud, sampled_indices.points, *keypoints);
+            }break;
+     
+     
+        default:
+            {
+            //********NORMAL SPACE SAMPLING *************
+            pcl::IndicesPtr sampled_indices_normal(new std::vector<int>());
+            pcl::NormalSpaceSampling<PointType,NormalType> normal_space_sampling;
+            normal_space_sampling.setInputCloud(cloud);
+            normal_space_sampling.setNormals(normals);
+            normal_space_sampling.setSeed(0);
+            normal_space_sampling.setSample(static_cast<unsigned int>(normals->size())/25);
+            normal_space_sampling.setBins(100,100,100);
+            normal_space_sampling.filter(*sampled_indices_normal);
+            pcl::copyPointCloud (*cloud, *sampled_indices_normal, *keypoints);
+            }break;
+     
      }
 }
 
@@ -161,7 +175,7 @@ void ORPointCloud::computeCloudResolution ()
     }
 }
 
-pcl::CorrespondencesPtr ORPointCloud::correspondences(const ORPointCloud* model, ORPointCloud* scene)
+pcl::CorrespondencesPtr ORPointCloud::correspondences(const ORPointCloud* model, const ORPointCloud* scene)
 {
     pcl::CorrespondencesPtr model_scene_corrs (new pcl::Correspondences ());
     pcl::KdTreeFLANN<DescriptorType> match_search;
@@ -227,7 +241,7 @@ double ORPointCloud::computeCloudRMS(const ORPointCloud* target, pcl::PointCloud
         }
 
         if (nr > 0){
-                return sqrt(fitness_score / nr)*1000.0;
+                return sqrt(fitness_score / nr);
         }else{
                 return (std::numeric_limits<double>::max ());
         }
